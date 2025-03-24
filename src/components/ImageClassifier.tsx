@@ -4,7 +4,7 @@ import { Sparkles } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import UploadZone from './UploadZone';
 import ResultDisplay from './ResultDisplay';
-import { toast } from "@/components/ui/sonner";
+import { toast } from "sonner";
 
 const ImageClassifier: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
