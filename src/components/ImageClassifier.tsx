@@ -30,20 +30,22 @@ const ImageClassifier: React.FC = () => {
         setModelLoading(true);
         setModelError(null);
         
-        // Use a model that's known to work well with image classification
+        // Use a compatible image classification model
         const imgClassifier = await pipeline(
           'image-classification',
-          'Xenova/vit-base-patch16-224'
+          'Xenova/swin-tiny-patch4-window7-224', // Using a more stable model
+          { quantized: false } // Disable quantization to avoid compatibility issues
         );
         
         setClassifier(imgClassifier);
         setModelLoaded(true);
-        setModelLoading(false);
+        toast.success("Image analysis model loaded successfully!");
       } catch (error) {
         console.error('Error loading model:', error);
         setModelError('Failed to load the image classification model');
-        setModelLoading(false);
         toast.error('Could not load the image analysis model');
+      } finally {
+        setModelLoading(false);
       }
     };
 
@@ -70,19 +72,31 @@ const ImageClassifier: React.FC = () => {
     setResult(null);
     
     try {
-      // Convert the image file to an HTMLImageElement which is supported by the model
+      // Create a URL from the File object
       const imageUrl = URL.createObjectURL(selectedImage);
       
       try {
-        // Run inference with the model using the URL directly
-        // The model will handle loading and processing the image
-        const results = await classifier(imageUrl);
+        // Get an Image element to pass to the model
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        
+        // Wait for the image to load
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = imageUrl;
+        });
+        
+        // Run inference with the model - the model needs the actual Image element
+        const results = await classifier(img);
         console.log("Model results:", results);
         
         // Process the results to determine if it's AI or real
         // Look for keywords that might suggest AI or real photos
-        const aiKeywords = ['synthetic', 'artificial', 'digital art', 'rendering', 'illustration', 'cartoon', 'drawing', 'animated', 'cgi'];
-        const realKeywords = ['photo', 'photograph', 'photography', 'landscape', 'portrait', 'natural', 'real', 'image'];
+        const aiKeywords = ['synthetic', 'artificial', 'digital art', 'rendering', 'illustration', 
+                           'cartoon', 'drawing', 'animated', 'cgi', 'graphic', 'computer', 'generated'];
+        const realKeywords = ['photo', 'photograph', 'photography', 'landscape', 'portrait', 
+                             'natural', 'real', 'image', 'camera', 'realistic'];
         
         let aiScore = 0;
         let realScore = 0;
