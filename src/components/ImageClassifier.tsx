@@ -30,7 +30,7 @@ const ImageClassifier: React.FC = () => {
         setModelLoading(true);
         setModelError(null);
         
-        // Use the image-classification task with a supported model
+        // Use a model that's known to work well with image classification
         const imgClassifier = await pipeline(
           'image-classification',
           'Xenova/vit-base-patch16-224'
@@ -70,95 +70,83 @@ const ImageClassifier: React.FC = () => {
     setResult(null);
     
     try {
-      // Convert the image file to base64
-      const reader = new FileReader();
+      // Convert the image file to an HTMLImageElement which is supported by the model
+      const imageUrl = URL.createObjectURL(selectedImage);
       
-      reader.onload = async (event) => {
-        if (!event.target || !event.target.result) {
-          throw new Error("Failed to read the image file");
-        }
-
-        try {
-          // Analyze the image using the model
-          const imageData = event.target.result;
+      try {
+        // Run inference with the model using the URL directly
+        // The model will handle loading and processing the image
+        const results = await classifier(imageUrl);
+        console.log("Model results:", results);
+        
+        // Process the results to determine if it's AI or real
+        // Look for keywords that might suggest AI or real photos
+        const aiKeywords = ['synthetic', 'artificial', 'digital art', 'rendering', 'illustration', 'cartoon', 'drawing', 'animated', 'cgi'];
+        const realKeywords = ['photo', 'photograph', 'photography', 'landscape', 'portrait', 'natural', 'real', 'image'];
+        
+        let aiScore = 0;
+        let realScore = 0;
+        
+        // Analyze the labels and their scores
+        results.forEach((prediction: any) => {
+          const label = prediction.label.toLowerCase();
+          const score = prediction.score;
           
-          // Run inference with the model
-          const results = await classifier(imageData);
-          console.log("Model results:", results);
-          
-          // Process the results to determine if it's AI or real
-          // Look for keywords that might suggest AI or real photos
-          const aiKeywords = ['synthetic', 'artificial', 'digital art', 'rendering', 'illustration', 'cartoon', 'drawing', 'animated', 'cgi'];
-          const realKeywords = ['photo', 'photograph', 'photography', 'landscape', 'portrait', 'natural', 'real', 'image'];
-          
-          let aiScore = 0;
-          let realScore = 0;
-          
-          // Analyze the labels and their scores
-          results.forEach((prediction: any) => {
-            const label = prediction.label.toLowerCase();
-            const score = prediction.score;
-            
-            if (aiKeywords.some(keyword => label.includes(keyword))) {
-              aiScore += score;
-            } else if (realKeywords.some(keyword => label.includes(keyword))) {
-              realScore += score;
-            }
-          });
-          
-          // If neither keyword set was detected, distribute score based on model confidence
-          if (aiScore === 0 && realScore === 0) {
-            // Use the top prediction's confidence to determine a base score
-            const topPrediction = results[0];
-            const otherPredictions = results.slice(1, 3); // Consider next 2 predictions
-
-            // Look at texture and complexity features that often differentiate AI from real
-            const complexityScore = otherPredictions.reduce((acc: number, p: any) => acc + p.score, 0);
-            
-            // AI images often have more uniform textures and patterns
-            if (topPrediction.score > 0.8 && complexityScore < 0.1) {
-              aiScore = 0.7;
-              realScore = 0.3;
-            } else {
-              realScore = 0.6;
-              aiScore = 0.4;
-            }
+          if (aiKeywords.some(keyword => label.includes(keyword))) {
+            aiScore += score;
+          } else if (realKeywords.some(keyword => label.includes(keyword))) {
+            realScore += score;
           }
+        });
+        
+        // If neither keyword set was detected, distribute score based on model confidence
+        if (aiScore === 0 && realScore === 0) {
+          // Use the top prediction's confidence to determine a base score
+          const topPrediction = results[0];
+          const otherPredictions = results.slice(1, 3); // Consider next 2 predictions
+
+          // Look at texture and complexity features that often differentiate AI from real
+          const complexityScore = otherPredictions.reduce((acc: number, p: any) => acc + p.score, 0);
           
-          // Normalize scores to ensure they sum to 1
-          const total = aiScore + realScore;
-          if (total > 0) {
-            aiScore = aiScore / total;
-            realScore = realScore / total;
+          // AI images often have more uniform textures and patterns
+          if (topPrediction.score > 0.8 && complexityScore < 0.1) {
+            aiScore = 0.7;
+            realScore = 0.3;
+          } else {
+            realScore = 0.6;
+            aiScore = 0.4;
           }
-          
-          // Determine final prediction and confidence
-          const isAI = aiScore > realScore;
-          const confidence = isAI ? aiScore : realScore;
-          
-          setResult({
-            prediction: isAI ? 'ai' : 'real',
-            confidence,
-            details: {
-              realScore,
-              aiScore
-            }
-          });
-          
-          toast.success("Analysis complete!");
-        } catch (error) {
-          console.error("Error during image analysis:", error);
-          toast.error("Failed to analyze the image");
-        } finally {
-          setIsAnalyzing(false);
         }
-      };
-      
-      reader.onerror = () => {
-        throw new Error("Failed to read the image file");
-      };
-      
-      reader.readAsDataURL(selectedImage);
+        
+        // Normalize scores to ensure they sum to 1
+        const total = aiScore + realScore;
+        if (total > 0) {
+          aiScore = aiScore / total;
+          realScore = realScore / total;
+        }
+        
+        // Determine final prediction and confidence
+        const isAI = aiScore > realScore;
+        const confidence = isAI ? aiScore : realScore;
+        
+        setResult({
+          prediction: isAI ? 'ai' : 'real',
+          confidence,
+          details: {
+            realScore,
+            aiScore
+          }
+        });
+        
+        toast.success("Analysis complete!");
+      } catch (error) {
+        console.error("Error during image analysis:", error);
+        toast.error("Failed to analyze the image");
+      } finally {
+        setIsAnalyzing(false);
+        // Clean up the object URL to prevent memory leaks
+        URL.revokeObjectURL(imageUrl);
+      }
     } catch (error) {
       console.error("Error analyzing image:", error);
       toast.error("Failed to analyze the image");
