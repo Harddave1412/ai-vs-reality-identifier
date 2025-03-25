@@ -30,11 +30,10 @@ const ImageClassifier: React.FC = () => {
         setModelLoading(true);
         setModelError(null);
         
-        // Use a compatible image classification model
+        // Use a compatible image classification model without the unsupported 'quantized' option
         const imgClassifier = await pipeline(
           'image-classification',
-          'Xenova/swin-tiny-patch4-window7-224', // Using a more stable model
-          { quantized: false } // Disable quantization to avoid compatibility issues
+          'Xenova/swin-tiny-patch4-window7-224' // Using a stable model
         );
         
         setClassifier(imgClassifier);
