@@ -33,7 +33,7 @@ const ImageClassifier: React.FC = () => {
         // Use a compatible image classification model without the unsupported 'quantized' option
         const imgClassifier = await pipeline(
           'image-classification',
-          'Xenova/swin-tiny-patch4-window7-224' // Using a stable model
+          'onnx-community/mobilenetv4_conv_small.e2400_r224_in1k'
         );
         
         setClassifier(imgClassifier);
@@ -75,23 +75,11 @@ const ImageClassifier: React.FC = () => {
       const imageUrl = URL.createObjectURL(selectedImage);
       
       try {
-        // Get an Image element to pass to the model
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        
-        // Wait for the image to load
-        await new Promise((resolve, reject) => {
-          img.onload = resolve;
-          img.onerror = reject;
-          img.src = imageUrl;
-        });
-        
-        // Run inference with the model - the model needs the actual Image element
-        const results = await classifier(img);
+        // Use the URL directly instead of creating Image object
+        const results = await classifier(imageUrl);
         console.log("Model results:", results);
         
         // Process the results to determine if it's AI or real
-        // Look for keywords that might suggest AI or real photos
         const aiKeywords = ['synthetic', 'artificial', 'digital art', 'rendering', 'illustration', 
                            'cartoon', 'drawing', 'animated', 'cgi', 'graphic', 'computer', 'generated'];
         const realKeywords = ['photo', 'photograph', 'photography', 'landscape', 'portrait', 
