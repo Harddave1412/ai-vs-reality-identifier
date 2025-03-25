@@ -30,7 +30,7 @@ const ImageClassifier: React.FC = () => {
         setModelLoading(true);
         setModelError(null);
         
-        // Use a simpler image classification model that's compatible with the browser
+        // Use a better model for general image classification
         const imgClassifier = await pipeline(
           'image-classification',
           'Xenova/vit-base-patch16-224'
@@ -71,7 +71,7 @@ const ImageClassifier: React.FC = () => {
     setResult(null);
     
     try {
-      // Convert the File to a base64 string, which works better with the models
+      // Convert the File to a base64 string
       const reader = new FileReader();
       
       reader.onload = async (e) => {
@@ -87,19 +87,21 @@ const ImageClassifier: React.FC = () => {
           const results = await classifier(base64String);
           console.log("Model results:", results);
           
-          // Define more comprehensive keyword lists for better classification
+          // Improved keyword lists with more precise terms
           const aiKeywords = [
-            'synthetic', 'artificial', 'digital art', 'rendering', 'illustration', 
-            'cartoon', 'drawing', 'animated', 'cgi', 'graphic', 'computer', 'generated',
-            'digital', 'painting', '3d', 'anime', 'artwork', 'design', 'abstract',
-            'vector', 'model', 'simulation', 'virtual', 'game', 'concept art'
+            'digital art', 'rendering', 'illustration', 'cartoon', 'drawing', 
+            'animated', 'cgi', 'graphic', 'computer generated', 'digital painting', 
+            '3d model', 'artwork', 'animation', 'game art', 'concept art', 
+            'vector', 'digital illustration', 'artificial', 'synthetic', 'generated',
+            'comic', 'manga', 'anime', 'abstract', 'design'
           ];
           
           const realKeywords = [
             'photo', 'photograph', 'photography', 'landscape', 'portrait', 
-            'natural', 'real', 'image', 'camera', 'realistic', 'person',
-            'outdoor', 'indoor', 'nature', 'building', 'animal', 'face',
-            'human', 'man', 'woman', 'candid', 'snapshot', 'documentary'
+            'camera', 'realistic', 'person', 'people', 'natural', 'nature', 
+            'outdoor', 'indoor', 'building', 'animal', 'face', 'human', 
+            'man', 'woman', 'candid', 'snapshot', 'documentary', 'wildlife',
+            'street', 'food', 'plant', 'sky', 'water', 'garden', 'beach'
           ];
           
           let aiScore = 0;
@@ -112,64 +114,77 @@ const ImageClassifier: React.FC = () => {
             const score = prediction.score;
             
             // Check if any AI or real keywords are found in the label
-            const foundAiKeyword = aiKeywords.find(keyword => label.includes(keyword));
-            const foundRealKeyword = realKeywords.find(keyword => label.includes(keyword));
+            const foundAiKeyword = aiKeywords.some(keyword => label.includes(keyword));
+            const foundRealKeyword = realKeywords.some(keyword => label.includes(keyword));
             
             if (foundAiKeyword) {
               aiScore += score;
               hasFoundKeywords = true;
-              console.log(`Found AI keyword: ${foundAiKeyword} in ${label} with score ${score}`);
+              console.log(`Found AI keyword in: ${label} with score ${score}`);
             } 
             
             if (foundRealKeyword) {
               realScore += score;
               hasFoundKeywords = true;
-              console.log(`Found Real keyword: ${foundRealKeyword} in ${label} with score ${score}`);
+              console.log(`Found Real keyword in: ${label} with score ${score}`);
             }
           });
           
           // If no keywords were found, use a more sophisticated analysis
           if (!hasFoundKeywords) {
-            // Examine the top 3 predictions and their distribution
-            const topPredictions = results.slice(0, 3);
+            // Examine the top predictions and their distribution
+            const topPredictions = results.slice(0, 5);
             
-            // Check confidence of top prediction - real photos often have more definitive top prediction
+            // Check confidence of top prediction
             const topScore = topPredictions[0].score;
             
             // Calculate distribution of confidence across top predictions
-            const distributionScore = topPredictions.reduce((sum: number, pred: any, index: number) => {
-              return sum + (pred.score / (index + 1));
-            }, 0);
+            const avgConfidence = topPredictions.reduce((sum: number, pred: any) => 
+              sum + pred.score, 0) / topPredictions.length;
             
-            // Natural images often have clearer subjects and higher top scores
-            if (topScore > 0.5) {
-              realScore += 0.7;
-              aiScore += 0.3;
-              console.log("No keywords found, using confidence-based analysis. High top score suggests real image.");
+            const confidenceSpread = topScore - avgConfidence;
+            
+            // Natural photos often have clearer subjects and higher top scores
+            if (topScore > 0.6 && confidenceSpread > 0.3) {
+              realScore += 0.8;
+              aiScore += 0.2;
+              console.log("No keywords found. High top score with large spread suggests real image.");
             } 
-            // More even distribution of probabilities often indicates AI-generated content
-            else if (distributionScore < 0.4) {
+            // More even distribution often indicates AI-generated content
+            else if (confidenceSpread < 0.2) {
               aiScore += 0.7;
               realScore += 0.3;
-              console.log("No keywords found, using distribution analysis. Even probability distribution suggests AI image.");
+              console.log("No keywords found. Even distribution suggests AI image.");
             }
-            // If still uncertain, use the label content itself for hints
+            // Check for patterns in the labels themselves
             else {
-              const topLabels = topPredictions.map(p => p.label.toLowerCase());
-              const isAbstract = topLabels.some(label => 
-                ['abstract', 'pattern', 'texture', 'design', 'art'].some(term => 
-                  label.includes(term)
-                )
+              const topLabels = topPredictions.map(p => p.label.toLowerCase()).join(' ');
+              
+              // Check for artificial/abstract content indicators
+              const artificialIndicators = ['abstract', 'pattern', 'texture', 'design', 'art', 'graphic'];
+              const hasArtificialIndicators = artificialIndicators.some(indicator => 
+                topLabels.includes(indicator)
               );
               
-              if (isAbstract) {
-                aiScore += 0.65;
-                realScore += 0.35;
-                console.log("No direct keywords found, but abstract concepts detected suggesting AI generation.");
+              // Check for natural world indicators
+              const naturalIndicators = ['person', 'tree', 'water', 'sky', 'mountain', 'animal', 'building'];
+              const hasNaturalIndicators = naturalIndicators.some(indicator => 
+                topLabels.includes(indicator)
+              );
+              
+              if (hasArtificialIndicators && !hasNaturalIndicators) {
+                aiScore += 0.75;
+                realScore += 0.25;
+                console.log("Found artificial indicators in predictions.");
+              } else if (hasNaturalIndicators && !hasArtificialIndicators) {
+                realScore += 0.75;
+                aiScore += 0.25;
+                console.log("Found natural world indicators in predictions.");
               } else {
-                realScore += 0.55;
-                aiScore += 0.45;
-                console.log("No clear indicators, slightly favoring real image based on concrete subjects.");
+                // If balanced or unclear, give slightly more weight to real
+                realScore += 0.6;
+                aiScore += 0.4;
+                console.log("No clear indicators, slightly favoring real image.");
               }
             }
           }
@@ -180,17 +195,19 @@ const ImageClassifier: React.FC = () => {
             aiScore = aiScore / total;
             realScore = realScore / total;
           } else {
-            // Fallback if no scores were calculated (shouldn't happen with the improved analysis)
+            // Fallback if no scores were calculated
             aiScore = 0.5;
             realScore = 0.5;
           }
           
+          console.log(`Final scores - Real: ${realScore}, AI: ${aiScore}`);
+          
           // Determine final prediction and confidence
-          const isAI = aiScore > realScore;
-          const confidence = isAI ? aiScore : realScore;
+          const prediction = realScore > aiScore ? 'real' : 'ai';
+          const confidence = prediction === 'real' ? realScore : aiScore;
           
           setResult({
-            prediction: isAI ? 'ai' : 'real',
+            prediction,
             confidence,
             details: {
               realScore,
