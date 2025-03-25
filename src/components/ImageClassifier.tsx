@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Sparkles, AlertCircle } from 'lucide-react';
 import { Button } from "@/components/ui/button";
@@ -86,43 +87,90 @@ const ImageClassifier: React.FC = () => {
           const results = await classifier(base64String);
           console.log("Model results:", results);
           
-          // Process the results to determine if it's AI or real
-          const aiKeywords = ['synthetic', 'artificial', 'digital art', 'rendering', 'illustration', 
-                             'cartoon', 'drawing', 'animated', 'cgi', 'graphic', 'computer', 'generated'];
-          const realKeywords = ['photo', 'photograph', 'photography', 'landscape', 'portrait', 
-                               'natural', 'real', 'image', 'camera', 'realistic'];
+          // Define more comprehensive keyword lists for better classification
+          const aiKeywords = [
+            'synthetic', 'artificial', 'digital art', 'rendering', 'illustration', 
+            'cartoon', 'drawing', 'animated', 'cgi', 'graphic', 'computer', 'generated',
+            'digital', 'painting', '3d', 'anime', 'artwork', 'design', 'abstract',
+            'vector', 'model', 'simulation', 'virtual', 'game', 'concept art'
+          ];
+          
+          const realKeywords = [
+            'photo', 'photograph', 'photography', 'landscape', 'portrait', 
+            'natural', 'real', 'image', 'camera', 'realistic', 'person',
+            'outdoor', 'indoor', 'nature', 'building', 'animal', 'face',
+            'human', 'man', 'woman', 'candid', 'snapshot', 'documentary'
+          ];
           
           let aiScore = 0;
           let realScore = 0;
+          let hasFoundKeywords = false;
           
-          // Analyze the labels and their scores
+          // Analyze the labels and their scores - use the full result set
           results.forEach((prediction: any) => {
             const label = prediction.label.toLowerCase();
             const score = prediction.score;
             
-            if (aiKeywords.some(keyword => label.includes(keyword))) {
+            // Check if any AI or real keywords are found in the label
+            const foundAiKeyword = aiKeywords.find(keyword => label.includes(keyword));
+            const foundRealKeyword = realKeywords.find(keyword => label.includes(keyword));
+            
+            if (foundAiKeyword) {
               aiScore += score;
-            } else if (realKeywords.some(keyword => label.includes(keyword))) {
+              hasFoundKeywords = true;
+              console.log(`Found AI keyword: ${foundAiKeyword} in ${label} with score ${score}`);
+            } 
+            
+            if (foundRealKeyword) {
               realScore += score;
+              hasFoundKeywords = true;
+              console.log(`Found Real keyword: ${foundRealKeyword} in ${label} with score ${score}`);
             }
           });
           
-          // If neither keyword set was detected, distribute score based on model confidence
-          if (aiScore === 0 && realScore === 0) {
-            // Use the top prediction's confidence to determine a base score
-            const topPrediction = results[0];
-            const otherPredictions = results.slice(1, 3); // Consider next 2 predictions
-
-            // Look at texture and complexity features that often differentiate AI from real
-            const complexityScore = otherPredictions.reduce((acc: number, p: any) => acc + p.score, 0);
+          // If no keywords were found, use a more sophisticated analysis
+          if (!hasFoundKeywords) {
+            // Examine the top 3 predictions and their distribution
+            const topPredictions = results.slice(0, 3);
             
-            // AI images often have more uniform textures and patterns
-            if (topPrediction.score > 0.8 && complexityScore < 0.1) {
-              aiScore = 0.7;
-              realScore = 0.3;
-            } else {
-              realScore = 0.6;
-              aiScore = 0.4;
+            // Check confidence of top prediction - real photos often have more definitive top prediction
+            const topScore = topPredictions[0].score;
+            
+            // Calculate distribution of confidence across top predictions
+            const distributionScore = topPredictions.reduce((sum: number, pred: any, index: number) => {
+              return sum + (pred.score / (index + 1));
+            }, 0);
+            
+            // Natural images often have clearer subjects and higher top scores
+            if (topScore > 0.5) {
+              realScore += 0.7;
+              aiScore += 0.3;
+              console.log("No keywords found, using confidence-based analysis. High top score suggests real image.");
+            } 
+            // More even distribution of probabilities often indicates AI-generated content
+            else if (distributionScore < 0.4) {
+              aiScore += 0.7;
+              realScore += 0.3;
+              console.log("No keywords found, using distribution analysis. Even probability distribution suggests AI image.");
+            }
+            // If still uncertain, use the label content itself for hints
+            else {
+              const topLabels = topPredictions.map(p => p.label.toLowerCase());
+              const isAbstract = topLabels.some(label => 
+                ['abstract', 'pattern', 'texture', 'design', 'art'].some(term => 
+                  label.includes(term)
+                )
+              );
+              
+              if (isAbstract) {
+                aiScore += 0.65;
+                realScore += 0.35;
+                console.log("No direct keywords found, but abstract concepts detected suggesting AI generation.");
+              } else {
+                realScore += 0.55;
+                aiScore += 0.45;
+                console.log("No clear indicators, slightly favoring real image based on concrete subjects.");
+              }
             }
           }
           
@@ -131,6 +179,10 @@ const ImageClassifier: React.FC = () => {
           if (total > 0) {
             aiScore = aiScore / total;
             realScore = realScore / total;
+          } else {
+            // Fallback if no scores were calculated (shouldn't happen with the improved analysis)
+            aiScore = 0.5;
+            realScore = 0.5;
           }
           
           // Determine final prediction and confidence
