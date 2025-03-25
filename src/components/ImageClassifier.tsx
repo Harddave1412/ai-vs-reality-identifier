@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Sparkles, AlertCircle } from 'lucide-react';
 import { Button } from "@/components/ui/button";
@@ -36,7 +35,7 @@ const ImageClassifier: React.FC = () => {
           'Xenova/vit-base-patch16-224'
         );
         
-        setClassifier(imgClassifier);
+        setClassifier(() => imgClassifier); // Store classifier as a function
         setModelLoaded(true);
         toast.success("Image analysis model loaded successfully!");
       } catch (error) {
@@ -80,23 +79,11 @@ const ImageClassifier: React.FC = () => {
             throw new Error("Failed to read image file");
           }
           
-          // Create an image element to properly load the image
-          const img = new Image();
-          img.crossOrigin = "anonymous";
+          const base64String = e.target.result as string;
           
-          // Set up image loading promise
-          const imageLoadPromise = new Promise<HTMLImageElement>((resolve, reject) => {
-            img.onload = () => resolve(img);
-            img.onerror = () => reject(new Error("Failed to load image"));
-            img.src = e.target.result as string;
-          });
-          
-          // Wait for image to load
-          const loadedImg = await imageLoadPromise;
-          
-          // Run the model with the loaded image
+          // Run the model with the base64 string
           console.log("Running classification on image...");
-          const results = await classifier(loadedImg);
+          const results = await classifier(base64String);
           console.log("Model results:", results);
           
           // Process the results to determine if it's AI or real
